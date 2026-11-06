@@ -1,0 +1,33 @@
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Temporary test files & logs
+*.log
+*.tmp
+scratch/
+
+# User exports & recorded media
+exports/*.mp4
+exports/*.svg
+exports/*.png
+!exports/.gitkeep
+
+# Dataset recordings
+dataset/*.jsonl
+!dataset/.gitkeep
+
+# IDEs & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -22,9 +22,11 @@ Write, sketch, move and export handwriting in mid-air with nothing but a standar
 
 ## Overview
 
-Smart Air Writer turns a webcam into a gesture-driven whiteboard. Hand landmarks are tracked in real time, filtered, interpreted by a gesture state machine and rendered as smooth vector strokes. Written words are recognized by a local OCR pipeline, corrected with a dictionary and language-context model, and can be exported as scalable vector graphics.
+Smart Air Writer turns a webcam into a gesture-driven whiteboard. Hand landmarks are tracked in real time, filtered, interpreted by a gesture state machine and rendered as smooth vector strokes. Written words are recognized by a local OCR pipeline, corrected with a dictionary and language-context model, and can be exported as scalable vector graphics or Markdown session summaries.
 
 Everything runs locally. No paid API, account or cloud service is required.
+
+---
 
 ## Table of Contents
 
@@ -46,17 +48,48 @@ Everything runs locally. No paid API, account or cloud service is required.
 
 - **Dwell-to-write**: point with the index finger; a progress ring fills over 0.8 s before ink starts flowing.
 - **Pinch-to-write**: pinch thumb and index finger together for immediate, zero-latency drawing.
-- **Pen lift**: close the fist to end the current stroke and attach it to the active word.
+- **Pen lift**: close the fist to end the current stroke immediately (`PEN UP`).
 - **Hover mode**: raise index and middle fingers to move the cursor without leaving ink.
 - **Radial tool menu**: open the non-dominant palm to display a floating menu around the hand (colors, brushes, background, eraser, undo, clear).
 - **Word manipulation**: pinch a committed word to drag it across the board, or fling it off-screen to delete it.
 - **Commit gesture**: hold a thumbs-up for 0.4 s to commit the current word, insert a space and trigger learning.
 - **Sponge eraser**: hold an open palm over the ink to erase the strokes beneath it.
 
-### Recognition
+### Smart Geometric Auto-Shapes
+
+- **Real-Time Snap**: automatically detects and snaps hand-drawn sketches into perfect primitives:
+  - **Straight Line**: chord-to-length deviation filtering.
+  - **Directed Arrow**: straight shaft with backward-angled wing heads.
+  - **Circle / Ellipse**: radius covariance analysis ($r_{\text{cov}} < 0.14$).
+  - **Rectangle / Triangle**: Douglas-Peucker polygon approximation.
+- Toggle anytime with `[F]`.
+
+### Chronological Session Replay
+
+- **Timestamped stroke playback**: rewatch entire writing and drawing sessions animated point-by-point based on original delta times.
+- **Interactive controls**: Play / Pause with `[Space]`, variable speeds (1x, 2x, 4x, 8x) with `[S]`, and exit with `[Y]`.
+- **Playback HUD**: interactive timeline bar with progress percentage and speed indicators.
+
+### AI Session Assistant & Notes Export
+
+- **Session synthesis**: aggregates recognized words, duration, total characters, and drawn shapes.
+- **Writing metrics**: calculates real-time Words Per Minute (WPM) and statistics.
+- **Markdown export (`[M]`)**: generates GitHub-flavored notes (`exports/notes_*.md`) with a chronological timeline and multilingual dictionary definitions.
+
+### Virtual Camera Broadcaster
+
+- **Seamless video conferencing**: stream the air-canvas directly as a virtual camera to **Zoom**, **Microsoft Teams**, **Google Meet**, **Discord**, or **OBS Studio** via `pyvirtualcam`.
+- Toggle broadcasting live with `[U]`.
+
+### Multilingual Support (FR / EN / AR)
+
+- **Trilingual UI & HUD**: switch interface labels and notifications between French, English, and Arabic transliterations with `[L]`.
+- **Bilingual & Cursive OCR**: multi-language recognition backend with vocabulary matching across French, English, and Arabic lexicons.
+
+### Recognition & Language Models
 
 - **Word-level OCR** with a local [EasyOCR](https://github.com/JaidedAI/EasyOCR) backend (ResNet, LSTM, CTC), able to read connected and cursive handwriting in a single pass.
-- **Asynchronous inference**: OCR runs in a background thread so the video loop stays responsive.
+- **Asynchronous inference**: OCR runs in a background thread so the video loop stays responsive at high FPS.
 - **SymSpell correction** with bigram context to resolve ambiguities such as `AZ1Z` to `AZIZ` or `2O25` to `2025`.
 - **Automatic fallback chain**: EasyOCR, EMNIST-CNN, synthetic network, geometric rules.
 - **Personal vocabulary**: committed words are learned and prioritized in later sessions.
@@ -74,23 +107,14 @@ Everything runs locally. No paid API, account or cloud service is required.
 
 ## How It Works
 
-```mermaid
-flowchart LR
-    A[Webcam] --> B[MediaPipe Hand Landmarker]
-    B --> C[One Euro Filter]
-    C --> D[Gesture State Machine]
-    D --> E[Stroke and Word Model]
-    E --> F[Spline Renderer]
-    F --> G[Compositor and HUD]
-    F --> H[SVG Export]
-    E --> I[Word OCR]
-    I --> J[SymSpell and Bigram Corrector]
-    J --> K[Recognized Text]
-```
-
 | Stage | Module | Responsibility |
 |---|---|---|
 | Tracking and gestures | `gesture_engine.py` | Landmark filtering, scale-adaptive pose estimation, gesture state machine |
+| Geometric shapes | `shape_engine.py` | Douglas-Peucker polygon fit, radius covariance, line & arrow snap |
+| Session replay | `session_replay.py` | Chronological timestamp-based stroke animator and timeline HUD |
+| Notes assistant | `smart_assistant.py` | Markdown synthesis, WPM analytics, glossary definitions |
+| Virtual camera | `virtual_camera.py` | Real-time video frame streamer for Zoom, Teams, Meet (OBS backend) |
+| Localization | `multilingual_engine.py` | French, English, and Arabic UI strings and multilingual vocabulary |
 | Interface | `bimanual_ui.py` | Radial menu and spatial word manipulation |
 | Rendering | `spline_renderer.py` | Catmull-Rom to Bezier conversion, SVG export |
 | Recognition | `air_keyboard.py` | OCR engine orchestration and fallback chain |
@@ -117,14 +141,20 @@ flowchart LR
 
 | Key | Function |
 |---|---|
-| `Space` | Commit current word and add a space |
+| `Space` | Commit current word and add a space (or Pause/Resume during Replay) |
 | `Tab` | Cycle through alternative OCR suggestions |
 | `Backspace` | Delete the last committed character |
+| `F` | Toggle Auto-Shape Snap ON / OFF (Circle, Rectangle, Line, Arrow, Triangle) |
+| `Y` | Start / Stop animated chronological session replay |
+| `S` | Cycle replay playback speed (1x, 2x, 4x, 8x) |
+| `M` | Export AI session notes & Markdown report to `exports/` |
+| `U` | Toggle Virtual Camera output (OBS / Zoom / Teams / Meet) |
+| `L` | Cycle UI language (Français, English, Arabic) |
 | `K` | Start or stop an online trajectory calibration session (A-Z, 0-9) |
 | `N` | Cycle recognition mode: Auto, Digits only, Letters only |
-| `B` | Cycle brushes |
-| `W` | Cycle backgrounds |
-| `P` | Export the board as SVG to `exports/` |
+| `B` | Cycle brushes (Neon, Calligraphy, Highlighter, Rainbow, Dotted) |
+| `W` | Cycle backgrounds (Webcam, Whiteboard, Dark Studio) |
+| `P` | Export the board as SVG and PNG to `exports/` |
 | `V` | Start or stop MP4 recording |
 | `Z` | Undo the last stroke or word |
 | `C` | Clear canvas and text |
@@ -139,18 +169,16 @@ flowchart LR
 
 - Python 3.10 or 3.11
 - A webcam
-- Internet access on first run only, to download model files (MediaPipe, EasyOCR, and EMNIST if you train the optional model)
+- Internet access on first run only, to download model files (MediaPipe and EasyOCR)
 
 ### Installation
 
 ```bash
 git clone https://github.com/aziz11414/air-keyboard.git
 cd air-keyboard
-
 python -m venv .venv
 # Windows: .venv\Scripts\activate
-source .venv/bin/activate
-
+# Linux/macOS: source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -163,13 +191,12 @@ python air_keyboard.py
 Raise your hand in front of the camera to begin.
 
 ### Optional: train the EMNIST model
-
 The EMNIST backend is used as a fallback when EasyOCR is unavailable.
 
 ```bash
-python train_model.py               # auto-detect backend
-python train_model.py --tensorflow  # CNN, higher accuracy
-python train_model.py --sklearn     # MLP, lighter, CPU only
+python train_model.py              # auto-detect backend
+python train_model.py --tensorflow # CNN, higher accuracy
+python train_model.py --sklearn    # MLP, lighter, CPU only
 ```
 
 Trained models are written to `model/`.
@@ -180,20 +207,25 @@ Trained models are written to `model/`.
 
 ```
 .
-├── air_keyboard.py          Main loop, HUD and video compositing
-├── gesture_engine.py        One Euro Filter, pose estimation, gesture state machine
-├── spline_renderer.py       Catmull-Rom to Bezier conversion, SVG exporter
-├── bimanual_ui.py           Radial menu and spatial word manipulator
-├── symspell_corrector.py    SymSpell dictionary and bigram language model
-├── online_tracker.py        Temporal trajectory processor and calibration engine
-├── text_corrector.py        Sequence-level probability corrector
-├── train_model.py           EMNIST training pipeline (TensorFlow and scikit-learn)
-├── requirements.txt         Python dependencies
-├── hand_landmarker.task     MediaPipe hand tracking model
-├── model/                   Trained models
-├── dataset/                 Calibration logs and trajectory datasets
-├── exports/                 Generated SVG and MP4 files
-└── web-app/                 Companion web / React client
+├── air_keyboard.py         # Main application loop, HUD, shortcuts, and video compositing
+├── shape_engine.py         # Geometric primitive recognition and snapping (Line, Arrow, Circle, Rect, Tri)
+├── session_replay.py       # Animated chronological stroke replayer with timeline HUD
+├── smart_assistant.py      # Session notes synthesis, WPM analytics, and Markdown report export
+├── virtual_camera.py       # OBS / pyvirtualcam broadcaster for Zoom, Teams, and Meet
+├── multilingual_engine.py  # Trilingual localization (FR, EN, AR) and dictionary glossary
+├── gesture_engine.py       # One Euro Filter, pose estimation, gesture state machine
+├── spline_renderer.py      # Catmull-Rom to Bezier conversion, SVG exporter
+├── bimanual_ui.py          # Radial menu and spatial word manipulator
+├── symspell_corrector.py   # SymSpell dictionary and bigram language model
+├── online_tracker.py       # Temporal trajectory processor and calibration engine
+├── text_corrector.py       # Sequence-level probability corrector
+├── train_model.py          # EMNIST training pipeline (TensorFlow and scikit-learn)
+├── requirements.txt        # Python dependencies
+├── hand_landmarker.task    # MediaPipe hand tracking model
+├── model/                  # Trained models
+├── dataset/                # Calibration logs and trajectory datasets
+├── exports/                # Generated SVG, MP4, and Markdown session notes
+└── web-app/                # Companion web / React client
 ```
 
 ---
@@ -203,9 +235,7 @@ Trained models are written to `model/`.
 - [ ] **Online trajectory recognition**: a 1D-CNN / CTC model trained directly on stroke features (`x, y, dx, dy, speed, curvature`) collected with the calibration tool (`K`), removing the rasterization step and reading cursive from gesture dynamics.
 - [ ] **ONNX export and web runtime**: port the gesture engine and temporal model to `web-app/` with `onnxruntime-web` for zero-install, in-browser use.
 - [ ] **Depth-plane writing**: start a stroke by pushing the finger through a virtual plane, as an alternative to the dwell timer.
-- [ ] **Multilingual corpus**: extend dictionaries to Spanish, German and Arabic, with vocabulary ingestion at runtime.
-- [ ] **Session replay**: animated playback of strokes from their timestamps.
-- [ ] **Virtual camera output**: use the board as a source in video-conferencing tools.
+- [ ] **Infinite canvas with bimanual zoom & pan**: zoom in and pan the whiteboard across large diagrams.
 
 ---
 

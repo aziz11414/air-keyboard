@@ -1384,6 +1384,10 @@ def main():
             if is_recording and video_writer is not None:
                 video_writer.write(display_frame)
 
+            # Virtual Camera Stream (Zoom / Teams / Meet)
+            if vcam_mgr.is_active:
+                vcam_mgr.send_frame(display_frame)
+
             # Window resized to 1024x576 for small screens
             window_frame = cv2.resize(display_frame, (WINDOW_WIDTH, WINDOW_HEIGHT), interpolation=cv2.INTER_AREA)
             cv2.imshow("Smart Air Writer v6.0 PRO", window_frame)
@@ -1505,6 +1509,8 @@ def main():
                 CURRENT_COLOR_KEY = chr(key)
 
     finally:
+        if vcam_mgr:
+            vcam_mgr.stop()
         if video_writer:
             video_writer.release()
         tracker.close()

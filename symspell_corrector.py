@@ -231,6 +231,7 @@ class SymSpellCorrector:
 
         raw_chars = [cands[0][0] if cands else '?' for cands in char_candidates]
         raw_word = "".join(raw_chars)
+        as_letters = "".join(CONFUSION_DIGIT_TO_LETTER.get(ch, ch) for ch in raw_chars)
 
         # Mode: DIGITS ONLY
         if mode == "digits":

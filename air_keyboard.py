@@ -921,6 +921,49 @@ def main():
     current_best_raw = ""
     alt_idx = 0
 
+    # Modern v6.0 PRO Extensions
+    replayer = SessionReplayer()
+    assistant = SessionAssistant(EXPORTS_DIR)
+    vcam_mgr = VirtualCameraManager(FRAME_WIDTH, FRAME_HEIGHT, fps=30)
+    lang_mgr = MultilingualManager("FR")
+    auto_shapes_enabled = True
+    last_frame_time = time.time()
+
+    def finalize_hand_stroke(h_state, draw_color, curr_brush):
+        nonlocal canvas
+        if not h_state["stroke"]:
+            return
+        if eraser_mode:
+            h_state["stroke"] = []
+            return
+
+        if calibration_mgr.is_active:
+            calibration_mgr.record_stroke(h_state["stroke"])
+            char_done = calibration_mgr.CALIBRATION_CHARS[max(0, calibration_mgr.char_index - 1)]
+            show_toast(f"CALIBRATED: '{char_done}'", (0, 255, 180), 1.5)
+        else:
+            final_pts = h_state["stroke"]
+            # Auto-Shape Detection & Snapping
+            if auto_shapes_enabled and len(final_pts) >= 8:
+                shape_type, snapped_pts, shape_conf = ShapeRecognizer.recognize_and_snap(final_pts)
+                if shape_type != "NONE" and shape_conf >= 0.85:
+                    final_pts = [(pt[0], pt[1], time.time()) for pt in snapped_pts]
+                    assistant.add_shape(shape_type)
+                    show_toast(f"{lang_mgr.get('SNAPPED')}: {shape_type}", (0, 255, 180), 2.0)
+
+            stroke_item = StrokeItem(
+                points=final_pts,
+                color=draw_color,
+                thickness=PEN_THICKNESS,
+                brush=curr_brush
+            )
+            doc.add_stroke_to_current(stroke_item)
+            replayer.record_stroke(stroke_item)
+            doc.render(canvas)
+            update_live_ocr()
+
+        h_state["stroke"] = []
+
     ocr_busy = False
 
     def update_live_ocr():
@@ -988,10 +1031,47 @@ def main():
                 break
 
             frame = cv2.flip(frame, 1)
-            hands_pts = tracker.process(frame)
             now = time.time()
+            dt = max(0.001, min(0.1, now - last_frame_time))
+            last_frame_time = now
             curr_brush = BRUSH_TYPES[CURRENT_BRUSH_IDX]
             curr_bg = BG_MODES[CURRENT_BG_IDX]
+
+            # -- REPLAY MODE LOOP (ANIMATED CHRONOLOGICAL STROKE PLAYBACK) --
+            if replayer.is_replaying:
+                prog = replayer.update_frame(canvas, dt)
+                display_frame = get_background(frame, curr_bg)
+                ink_gray = cv2.cvtColor(canvas, cv2.COLOR_BGR2GRAY)
+                _, ink_mask = cv2.threshold(ink_gray, 5, 255, cv2.THRESH_BINARY)
+                if curr_bg == "WHITEBOARD":
+                    display_frame[ink_mask > 0] = (30, 30, 35)
+                else:
+                    display_frame[ink_mask > 0] = canvas[ink_mask > 0]
+
+                replayer.draw_hud(display_frame, prog)
+
+                if vcam_mgr.is_active:
+                    vcam_mgr.send_frame(display_frame)
+
+                window_frame = cv2.resize(display_frame, (WINDOW_WIDTH, WINDOW_HEIGHT), interpolation=cv2.INTER_AREA)
+                cv2.imshow("Smart Air Writer v6.0 PRO", window_frame)
+
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord('q') or key == ord('Q'):
+                    break
+                elif key == ord(' '):
+                    replayer.toggle_pause()
+                elif key == ord('s') or key == ord('S'):
+                    new_spd = replayer.cycle_speed()
+                    show_toast(f"Replay Speed: {new_spd:.0f}x", (0, 240, 255), 1.0)
+                elif key == ord('y') or key == ord('Y'):
+                    replayer.stop_replay()
+                    canvas.fill(0)
+                    doc.render(canvas)
+                    show_toast("REPLAY EXITED", (200, 200, 200), 1.5)
+                continue
+
+            hands_pts = tracker.process(frame)
 
             # -- 1. COMPOSITING BACKGROUND & INK --
             display_frame = get_background(frame, curr_bg)
@@ -1110,27 +1190,11 @@ def main():
                 if is_fist:
                     h_state["index_hold_start"] = None   # réinitialise le délai
                     if h_state["stroke"]:
-                        # Commit le segment de trait en cours
-                        if not eraser_mode:
-                            if calibration_mgr.is_active:
-                                calibration_mgr.record_stroke(h_state["stroke"])
-                                char_done = calibration_mgr.CALIBRATION_CHARS[max(0, calibration_mgr.char_index - 1)]
-                                show_toast(f"CALIBRATED: '{char_done}'", (0, 255, 180), 1.5)
-                            else:
-                                stroke_item = StrokeItem(
-                                    points=h_state["stroke"],
-                                    color=draw_color,
-                                    thickness=PEN_THICKNESS,
-                                    brush=curr_brush
-                                )
-                                doc.add_stroke_to_current(stroke_item)
-                                doc.render(canvas)
-                                update_live_ocr()
-                        h_state["stroke"] = []
+                        finalize_hand_stroke(h_state, draw_color, curr_brush)
                     h_state["active"] = False
                     # Indicateur visuel ✊ poing
                     cv2.circle(display_frame, (cx, cy), 20, (60, 60, 200), 2)
-                    cv2.putText(display_frame, "\u271a PEN UP", (cx - 28, cy - 26),
+                    cv2.putText(display_frame, "\u271a " + lang_mgr.get("PEN_UP"), (cx - 28, cy - 26),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.42, (120, 120, 255), 1)
                     continue   # skip le reste pour cette main
 
@@ -1195,22 +1259,7 @@ def main():
                         doc.render(canvas)
                         show_toast(f'DELETED: "{m_word.text}"', (0, 100, 255), 1.5)
                     elif h_state["stroke"]:
-                        if not eraser_mode:
-                            if calibration_mgr.is_active:
-                                calibration_mgr.record_stroke(h_state["stroke"])
-                                char_done = calibration_mgr.CALIBRATION_CHARS[max(0, calibration_mgr.char_index - 1)]
-                                show_toast(f"CALIBRATED: '{char_done}'", (0, 255, 180), 1.5)
-                            else:
-                                stroke_item = StrokeItem(
-                                    points=h_state["stroke"],
-                                    color=draw_color,
-                                    thickness=PEN_THICKNESS,
-                                    brush=curr_brush
-                                )
-                                doc.add_stroke_to_current(stroke_item)
-                                doc.render(canvas)
-                                update_live_ocr()
-                        h_state["stroke"] = []
+                        finalize_hand_stroke(h_state, draw_color, curr_brush)
                     h_state["active"] = False
 
                     # Two fingers = Hover cursor (Pen Up / move without drawing)
@@ -1259,12 +1308,13 @@ def main():
                     if c_prog >= 1.0:
                         if live_word_text:
                             corrector.learn(live_word_text)
+                            assistant.add_word(live_word_text)
                             doc.commit_current_word(live_word_text)
                             committed_text += live_word_text + " "
-                            show_toast(f'COMMITTED: "{live_word_text}" [OK]', (0, 255, 128), 2.0)
+                            show_toast(f'{lang_mgr.get("COMMITTED")}: "{live_word_text}" [OK]', (0, 255, 128), 2.0)
                         else:
                             committed_text += " "
-                            show_toast("SPACE [OK]", (0, 255, 128), 1.5)
+                            show_toast(f'{lang_mgr.get("SPACE")} [OK]', (0, 255, 128), 1.5)
                         live_word_text = ""
                         live_word_alts = []
                         current_best_raw = ""
@@ -1280,40 +1330,62 @@ def main():
             cv2.rectangle(display_frame, (0, 0), (FRAME_WIDTH, 60), (18, 18, 22), -1)
             cv2.line(display_frame, (0, 60), (FRAME_WIDTH, 60), (55, 55, 65), 1)
 
-            cv2.putText(display_frame, "AIR WRITER v6.0 PRO", (20, 38),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.90, (255, 255, 255), 2)
+            cv2.putText(display_frame, lang_mgr.get("TITLE"), (20, 38),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.82, (255, 255, 255), 2)
             if eraser_mode:
-                cv2.putText(display_frame, "MODE: ERASER [E]", (285, 38),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.52, (0, 100, 255), 2)
+                cv2.putText(display_frame, f"MODE: {lang_mgr.get('ERASER')} [E]", (290, 38),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.48, (0, 100, 255), 2)
             else:
-                cv2.putText(display_frame, f"Brush: {curr_brush} [B]", (285, 38),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.52, (0, 240, 255), 1)
+                cv2.putText(display_frame, f"{lang_mgr.get('BRUSH')}: {curr_brush} [B]", (290, 38),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.48, (0, 240, 255), 1)
 
-            cv2.putText(display_frame, f"Board: {curr_bg} [W]", (495, 38),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.52, (200, 200, 200), 1)
+            # Auto-Shape Badge
+            shape_txt = "Shape: ON [F]" if auto_shapes_enabled else "Shape: OFF [F]"
+            shape_col = (0, 255, 180) if auto_shapes_enabled else (120, 120, 120)
+            cv2.putText(display_frame, shape_txt, (475, 38),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.48, shape_col, 1)
 
+            # Virtual Camera Badge
+            if vcam_mgr.is_active:
+                cv2.circle(display_frame, (625, 33), 5, (0, 255, 128), -1)
+                cv2.putText(display_frame, "V-Cam: ON [U]", (635, 38),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.46, (0, 255, 128), 1)
+            else:
+                cv2.putText(display_frame, "V-Cam [U]", (625, 38),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.46, (130, 130, 130), 1)
+
+            # Word count
             word_count = len(doc.committed_words) + (1 if not doc.current_word.is_empty() else 0)
-            cv2.putText(display_frame, f"Words: {word_count}", (690, 38),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.52, (0, 255, 128), 1)
+            cv2.putText(display_frame, f"{lang_mgr.get('WORDS')}: {word_count}", (735, 38),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.48, (0, 255, 128), 1)
 
+            # Recording badge
             if is_recording:
                 rec_secs = int(now - record_start_time)
                 if int(now * 2) % 2 == 0:
-                    cv2.circle(display_frame, (810, 33), 7, (0, 0, 255), -1)
-                cv2.putText(display_frame, f"REC {rec_secs // 60:02d}:{rec_secs % 60:02d}", (825, 38),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.52, (0, 0, 255), 2)
+                    cv2.circle(display_frame, (830, 33), 6, (0, 0, 255), -1)
+                cv2.putText(display_frame, f"REC {rec_secs // 60:02d}:{rec_secs % 60:02d}", (842, 38),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.48, (0, 0, 255), 2)
             else:
-                cv2.putText(display_frame, "Rec [V]", (810, 38),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.50, (140, 140, 140), 1)
+                cv2.putText(display_frame, "Rec [V]", (830, 38),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.46, (140, 140, 140), 1)
 
-            cv2.putText(display_frame, "Export [P]", (920, 38),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.50, (255, 200, 0), 1)
+            # Replay badge
+            cv2.putText(display_frame, "Replay [Y]", (905, 38),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.46, (0, 200, 255), 1)
 
+            # Notes Export badge
+            cv2.putText(display_frame, "Notes [M]", (995, 38),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.46, (255, 180, 0), 1)
+
+            # Language badge
+            cv2.putText(display_frame, f"[{lang_mgr.lang}]", (1080, 38),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.46, (0, 255, 200), 2)
+
+            # Palette color circle
             col_name, col_bgr = PALETTE[CURRENT_COLOR_KEY]
-            cv2.circle(display_frame, (FRAME_WIDTH - 145, 33), 11, col_bgr, -1)
-            cv2.circle(display_frame, (FRAME_WIDTH - 145, 33), 13, (200, 200, 200), 2)
-            cv2.putText(display_frame, col_name, (FRAME_WIDTH - 125, 38),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.50, (200, 200, 200), 1)
+            cv2.circle(display_frame, (FRAME_WIDTH - 65, 33), 11, col_bgr, -1)
+            cv2.circle(display_frame, (FRAME_WIDTH - 65, 33), 13, (200, 200, 200), 2)
 
             # -- 2. AUTO-UPDATING TEXT BAR (just under the top bar) --
             cv2.rectangle(display_frame, (0, 62), (FRAME_WIDTH, 110), (16, 18, 26), -1)
@@ -1450,16 +1522,40 @@ def main():
                 # Space commits the current word, learns it, and moves to the next
                 if live_word_text:
                     corrector.learn(live_word_text)
+                    assistant.add_word(live_word_text)
                     doc.commit_current_word(live_word_text)
                     committed_text += live_word_text + " "
-                    show_toast(f'COMMITTED: "{live_word_text}"', (0, 240, 255), 1.6)
+                    show_toast(f'{lang_mgr.get("COMMITTED")}: "{live_word_text}"', (0, 240, 255), 1.6)
                 else:
                     committed_text += " "
-                    show_toast("SPACE", (0, 240, 255), 1.2)
+                    show_toast(lang_mgr.get("SPACE"), (0, 240, 255), 1.2)
                 live_word_text = ""
                 live_word_alts = []
                 current_best_raw = ""
                 alt_idx = 0
+            elif key == ord('f') or key == ord('F'):
+                auto_shapes_enabled = not auto_shapes_enabled
+                status_txt = "ON" if auto_shapes_enabled else "OFF"
+                col = (0, 255, 180) if auto_shapes_enabled else (140, 140, 140)
+                show_toast(f"AUTO-SHAPE SNAP: {status_txt}", col, 2.0)
+            elif key == ord('y') or key == ord('Y'):
+                if replayer.all_strokes:
+                    canvas.fill(0)
+                    replayer.start_replay()
+                    show_toast("SESSION REPLAY STARTED [Space: Pause, S: Speed, Y: Exit]", (0, 240, 255), 2.5)
+                else:
+                    show_toast("No strokes to replay yet! Draw something first.", (100, 100, 255), 2.0)
+            elif key == ord('m') or key == ord('M'):
+                notes_path = assistant.export_markdown()
+                notes_fn = os.path.basename(notes_path)
+                show_toast(f"SAVED: exports/{notes_fn}", (0, 255, 128), 3.0)
+            elif key == ord('u') or key == ord('U'):
+                ok, msg = vcam_mgr.toggle()
+                col = (0, 255, 128) if vcam_mgr.is_active else (0, 140, 255)
+                show_toast(msg, col, 2.5)
+            elif key == ord('l') or key == ord('L'):
+                new_lang, lang_lbl = lang_mgr.cycle_language()
+                show_toast(lang_lbl, (0, 240, 255), 2.0)
             elif key == ord('r') or key == ord('R'):
                 update_live_ocr()
                 if live_word_text:

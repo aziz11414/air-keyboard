@@ -50,7 +50,7 @@ BUILTIN_LEXICON = [
     "JE", "TU", "IL", "ELLE", "NOUS", "VOUS", "ILS", "ELLES", "ON", "CE", "CET", "CETTE",
     "MON", "TON", "SON", "NOTRE", "VOTRE", "LEUR", "LE", "LA", "LES", "UNE", "DES",
     "EST", "SONT", "SUIS", "ES", "AI", "AS", "AVONS", "AVEZ", "ONT", "FAIS", "FAIT", "VA", "VAS", "VONT",
-    "BONSOIR", "COUCOU", "CA", "VA", "BIENVENUE", "AZIZ", "ANAS", "HANA", "GAYETH", "MEDAZ",
+    "BONSOIR", "COUCOU", "CA", "VA", "BIENVENUE", "AZIZ", "ANAS", "HANA", "GAYETH", "MEDAZ", "LOL", "MDR", "PTDR", "COOL", "SUPER", "TOP", "OK", "BRO", "FUN", "WIN", "GAME",
     # Verbes et actions fréquents
     "JOUE", "JOUER", "JEU", "PARLE", "PARLER", "REGARDE", "REGARDER", "ECOUTE", "ECOUTER",
     "MANGE", "MANGER", "DORS", "DORMIR", "AIME", "AIMER", "VOIS", "VOIT", "SAIS", "SAIT", "PEUX", "PEUT", "VEUX", "VEUT",
@@ -163,6 +163,22 @@ class SymSpellCorrector:
         except Exception:
             pass
 
+    @staticmethod
+    def _levenshtein(s1, s2):
+        if s1 == s2:
+            return 0
+        len1, len2 = len(s1), len(s2)
+        if abs(len1 - len2) > 2:
+            return abs(len1 - len2)
+        prev = list(range(len2 + 1))
+        for i, c1 in enumerate(s1):
+            curr = [i + 1] * (len2 + 1)
+            for j, c2 in enumerate(s2):
+                cost = 0 if c1 == c2 else 1
+                curr[j + 1] = min(prev[j + 1] + 1, curr[j] + 1, prev[j] + cost)
+            prev = curr
+        return prev[len2]
+
     def lookup(self, word, max_dist=None):
         """
         Fast lookup via symmetric deletions. Returns [(cand_word, edit_dist, freq), ...].
@@ -190,8 +206,8 @@ class SymSpellCorrector:
             if d in self.deletes:
                 for match_w in self.deletes[d]:
                     if match_w not in candidates:
-                        # Approximate edit distance
-                        ed = abs(len(word) - len(match_w)) + (0 if d in match_w else 1)
+                        # Exact Levenshtein distance
+                        ed = self._levenshtein(word, match_w)
                         if ed <= max_dist:
                             candidates[match_w] = (match_w, ed, self.words.get(match_w, 1))
 

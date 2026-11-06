@@ -1,126 +1,226 @@
-# 🌌 Smart Air Writer & Spatial Whiteboard v6.0 PRO
+<div align="center">
 
-An advanced, touchless **Spatial Air-Writing & Digital Whiteboard** system powered by Computer Vision, Deep Learning, and Geometric Splines. Write, sketch, drag, manipulate words, and export vector graphics in the air using only a standard webcam.
+# Smart Air Writer
 
-100% Free, Open-Source, and runs entirely locally without any paid APIs or cloud dependencies.
+**Touchless air-writing and spatial whiteboard, powered by computer vision and deep learning.**
 
----
+Write, sketch, move and export handwriting in mid-air with nothing but a standard webcam.
 
-## ✨ Key Features
+![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11-3776AB?logo=python&logoColor=white)
+![OpenCV](https://img.shields.io/badge/OpenCV-5C3EE8?logo=opencv&logoColor=white)
+![MediaPipe](https://img.shields.io/badge/MediaPipe-Hand%20Landmarker-0097A7)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Status](https://img.shields.io/badge/status-active%20development-orange)
 
-### 1. ✍️ Hybrid Dual-Mode Gesture Writing Engine
-* **☝️ Index Pointing (0.8s Dwell)**: Point your index finger to begin drawing. A circular progress ring animates around your fingertip during the 0.8s dwell countdown before ink starts flowing.
-* **✊ Fist / All Fingers Curled**: Instantly lifts the pen (`Pen Up`) and finishes the current stroke, committing it to the active word.
-* **👌 Instant Pinch-to-Write**: Pinch your thumb and index together for immediate, zero-latency drawing.
-* **✌️ Two-Finger Hover**: Raise index and middle fingers (peace sign) to move the cursor across the canvas freely without leaving any ink trail.
-* **🖐️ Left-Hand Holographic Radial Palette**: Open your non-dominant (left) palm to trigger a floating 3D tool menu in orbit around your hand (color selection, brush switching, background toggle, sponge eraser, undo, and clear).
-* **👌 Spatial Word Manipulation**: Pinch over any committed word to grab and drag it across the board (`offset_x`, `offset_y`), or fling it off-screen to delete.
-* **👍 Thumbs-Up Commit (0.4s)**: Hold a thumbs-up gesture for 0.4s to commit the active word, append a space, and trigger auto-learning.
+</div>
 
-### 2. 🧠 Open-Source Cursive & Word-Level AI OCR
-* **Local EasyOCR Integration (ResNet + LSTM + CTC)**: Unlike legacy character-by-character classifiers, EasyOCR recognizes **connected cursive words** and continuous handwriting in a single pass.
-* **Asynchronous Multithreaded Processing**: OCR inference runs in a background daemon thread, guaranteeing that the webcam video stream remains buttery-smooth at 60 FPS.
-* **Fast SymSpell $O(1)$ Correction & Bigram Context**: Symmetric delete lookup resolves handwriting ambiguities (`joue` $\rightarrow$ `JOUE`, `AZ1Z` $\rightarrow$ `AZIZ`, `2O25` $\rightarrow$ `2025`) using contextual vocabulary and bigram transition probabilities $P(w_i \mid w_{i-1})$.
-* **Multi-Tier Fallback**: EasyOCR $\rightarrow$ EMNIST-CNN $\rightarrow$ Synthetic Net $\rightarrow$ Geometric Rules.
-
-### 3. 🎨 Vector Spline Rendering & Smoothing
-* **1€ Filter (One Euro Filter)**: Adaptive low-pass filtering on hand landmarks eliminates stationary jitter while preserving instant dynamic response during rapid handwriting strokes.
-* **Catmull-Rom to Cubic Bézier Conversion**: Raw discrete points are analytically converted into continuous $C^1$ cubic Bézier curves for smooth anti-aliased in-app rendering.
-* **Multi-Brush Aesthetics**: Neon Glow, Calligraphy (angle-sensitive stroke width), Highlighter (semi-transparent overlay), and Dotted.
-* **Scalable Vector Export (`[P]`)**: Exports the entire board to a clean SVG vector file (`<path d="M... C...">`) with embedded glow filters, ready for Figma or Adobe Illustrator.
-* **Full HD MP4 Recording (`[V]`)**: Record live sessions directly to MP4 video.
+<!-- Add a demo GIF here once recorded:
+<p align="center"><img src="docs/demo.gif" alt="Smart Air Writer demo" width="720"></p>
+-->
 
 ---
 
-## 🚧 Active Development & Upcoming Roadmap
+## Overview
 
-The following features are currently under active development:
+Smart Air Writer turns a webcam into a gesture-driven whiteboard. Hand landmarks are tracked in real time, filtered, interpreted by a gesture state machine and rendered as smooth vector strokes. Written words are recognized by a local OCR pipeline, corrected with a dictionary and language-context model, and can be exported as scalable vector graphics.
 
-- [ ] **Sequential Online Trajectory Recognition (1D-CNN / CTC)**: Training a dedicated temporal model directly on 6D motor stroke features (`[norm_x, norm_y, dx, dy, speed, curvature]`) collected via the interactive calibration tool (`[K]`). This will eliminate the rasterization step and recognize cursive words directly from gesture dynamics.
-- [ ] **WebAssembly & ONNX Web Runtime**: Porting the online temporal tracker and gesture engine to the companion web application (`web-app/`) using `onnxruntime-web` for zero-install, in-browser spatial computing.
-- [ ] **Virtual Z-Depth Plane Writing**: Integrating depth estimation so users can begin writing by pushing their finger forward through a virtual spatial glass plane, as an alternative to the 0.8s dwell timer.
-- [ ] **Expanded Multilingual Corpus**: Expanding built-in dictionary indexes for Spanish, German, and Arabic handwriting with real-time vocabulary ingestion.
+Everything runs locally. No paid API, account or cloud service is required.
+
+## Table of Contents
+
+- [Features](#features)
+- [How It Works](#how-it-works)
+- [Gesture Reference](#gesture-reference)
+- [Keyboard Shortcuts](#keyboard-shortcuts)
+- [Getting Started](#getting-started)
+- [Project Structure](#project-structure)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
-## 🖐️ Gesture Controls Quick Reference
+## Features
 
-| Gesture | Action | Description |
+### Gesture input
+
+- **Dwell-to-write**: point with the index finger; a progress ring fills over 0.8 s before ink starts flowing.
+- **Pinch-to-write**: pinch thumb and index finger together for immediate, zero-latency drawing.
+- **Pen lift**: close the fist to end the current stroke and attach it to the active word.
+- **Hover mode**: raise index and middle fingers to move the cursor without leaving ink.
+- **Radial tool menu**: open the non-dominant palm to display a floating menu around the hand (colors, brushes, background, eraser, undo, clear).
+- **Word manipulation**: pinch a committed word to drag it across the board, or fling it off-screen to delete it.
+- **Commit gesture**: hold a thumbs-up for 0.4 s to commit the current word, insert a space and trigger learning.
+- **Sponge eraser**: hold an open palm over the ink to erase the strokes beneath it.
+
+### Recognition
+
+- **Word-level OCR** with a local [EasyOCR](https://github.com/JaidedAI/EasyOCR) backend (ResNet, LSTM, CTC), able to read connected and cursive handwriting in a single pass.
+- **Asynchronous inference**: OCR runs in a background thread so the video loop stays responsive.
+- **SymSpell correction** with bigram context to resolve ambiguities such as `AZ1Z` to `AZIZ` or `2O25` to `2025`.
+- **Automatic fallback chain**: EasyOCR, EMNIST-CNN, synthetic network, geometric rules.
+- **Personal vocabulary**: committed words are learned and prioritized in later sessions.
+
+### Rendering and export
+
+- **One Euro Filter** on hand landmarks: removes jitter at rest while staying responsive during fast strokes.
+- **Spline smoothing**: Catmull-Rom curves converted to cubic Bezier segments for clean, anti-aliased strokes.
+- **Brushes**: Neon, Calligraphy (speed-sensitive width), Highlighter, Rainbow, Dotted.
+- **Backgrounds**: live webcam, digital whiteboard, dark studio.
+- **SVG export**: the whole board is exported as `<path>` elements with cubic Bezier commands, ready for Figma or Illustrator.
+- **Video recording**: save sessions to MP4.
+
+---
+
+## How It Works
+
+```mermaid
+flowchart LR
+    A[Webcam] --> B[MediaPipe Hand Landmarker]
+    B --> C[One Euro Filter]
+    C --> D[Gesture State Machine]
+    D --> E[Stroke and Word Model]
+    E --> F[Spline Renderer]
+    F --> G[Compositor and HUD]
+    F --> H[SVG Export]
+    E --> I[Word OCR]
+    I --> J[SymSpell and Bigram Corrector]
+    J --> K[Recognized Text]
+```
+
+| Stage | Module | Responsibility |
 |---|---|---|
-| ☝️ **Point Index (0.8s)** | **Air Writing** | Circular dwell ring fills for 0.8s, then writes continuous ink |
-| ✊ **Closed Fist** | **Pen Up / Stop** | Stops writing immediately and finalizes stroke |
-| ✌️ **Two Fingers (✌️)** | **Hover Cursor** | Move cursor across the board without drawing |
-| 👌 **Pinch (Thumb+Index)** | **Pinch-to-Write / Grab** | Write instantly, or pinch an existing word to move / fling to delete |
-| 👍 **Thumbs Up (0.4s)** | **Commit Word / Space** | Finalizes word recognition, inserts space, and triggers learning |
-| 🖐️ **Left Open Palm** | **Radial Tool Menu** | Floating holographic palette (Colors, Brushes, Undo, Clear) |
-| 🖐️ **Palm Held on Ink** | **Sponge Eraser** | Erases ink strokes directly beneath the palm area |
+| Tracking and gestures | `gesture_engine.py` | Landmark filtering, scale-adaptive pose estimation, gesture state machine |
+| Interface | `bimanual_ui.py` | Radial menu and spatial word manipulation |
+| Rendering | `spline_renderer.py` | Catmull-Rom to Bezier conversion, SVG export |
+| Recognition | `air_keyboard.py` | OCR engine orchestration and fallback chain |
+| Correction | `symspell_corrector.py`, `text_corrector.py` | Dictionary lookup, bigram model, sequence-level scoring |
+| Online data | `online_tracker.py` | Trajectory features and calibration sessions |
 
 ---
 
-## ⌨️ Desktop Keyboard Shortcuts
+## Gesture Reference
+
+| Gesture | Action | Details |
+|---|---|---|
+| Index finger pointed (0.8 s) | Write | Dwell ring fills, then continuous ink |
+| Closed fist | Pen up | Ends the stroke immediately |
+| Index and middle fingers raised | Hover | Moves the cursor without drawing |
+| Thumb and index pinched | Write / Grab | Instant drawing, or grab a word to move it or fling it to delete |
+| Thumbs up (0.4 s) | Commit | Finalizes the word, inserts a space, triggers learning |
+| Left open palm | Tool menu | Radial palette: colors, brushes, undo, clear |
+| Open palm over ink | Sponge eraser | Erases strokes under the palm |
+
+---
+
+## Keyboard Shortcuts
 
 | Key | Function |
 |---|---|
-| `[Space]` | Commit current word & add space |
-| `[Tab]` | Cycle through alternate OCR word suggestions |
-| `[Bksp]` | Delete last committed character |
-| `[K]` | Toggle **Online Trajectory Calibration Session** (A-Z, 0-9) |
-| `[N]` | Cycle Recognition Mode (**AUTO** / **DIGITS ONLY** / **LETTERS ONLY**) |
-| `[B]` | Cycle Brushes (Neon, Calligraphy, Highlighter, Rainbow, Dotted) |
-| `[W]` | Cycle Backgrounds (Webcam, Digital Whiteboard, Dark Studio) |
-| `[P]` | Export clean vector **SVG (Cubic Bézier)** to `exports/` |
-| `[V]` | Start / Stop HD MP4 Session Video Recording |
-| `[Z]` | Undo last stroke or word |
-| `[C]` | Clear canvas and reset text |
-| `[1-5]` | Quick Color Switch (Cyan, Green, Yellow, Pink, White) |
-| `[Q]` | Quit Application |
+| `Space` | Commit current word and add a space |
+| `Tab` | Cycle through alternative OCR suggestions |
+| `Backspace` | Delete the last committed character |
+| `K` | Start or stop an online trajectory calibration session (A-Z, 0-9) |
+| `N` | Cycle recognition mode: Auto, Digits only, Letters only |
+| `B` | Cycle brushes |
+| `W` | Cycle backgrounds |
+| `P` | Export the board as SVG to `exports/` |
+| `V` | Start or stop MP4 recording |
+| `Z` | Undo the last stroke or word |
+| `C` | Clear canvas and text |
+| `1` - `5` | Select color: cyan, green, yellow, pink, white |
+| `Q` | Quit |
 
 ---
 
-## 📁 Repository Structure
+## Getting Started
 
-```
-├── air_keyboard.py         # Main application loop, HUD, and video compositing
-├── gesture_engine.py       # 1€ Filter, scale-adaptive pose estimator, FSM state machine
-├── spline_renderer.py      # Catmull-Rom to Cubic Bézier math & SVG vector exporter
-├── bimanual_ui.py          # Holographic radial menu & spatial WordManipulator
-├── symspell_corrector.py   # SymSpell O(1) dictionary + Bigram language model
-├── online_tracker.py       # 6D temporal trajectory processor & calibration engine
-├── text_corrector.py       # Sequence-level probability corrector
-├── train_model.py          # Offline EMNIST training pipeline (TensorFlow & scikit-learn)
-├── requirements.txt        # Python dependency manifest
-├── hand_landmarker.task    # MediaPipe hand tracking model
-├── model/                  # Local neural network models
-├── dataset/                # Calibration logs and trajectory datasets
-├── exports/                # Saved vector SVGs and MP4 video recordings
-└── web-app/                # Companion Web / React client implementation
-```
+### Requirements
 
----
+- Python 3.10 or 3.11
+- A webcam
+- Internet access on first run only, to download model files (MediaPipe, EasyOCR, and EMNIST if you train the optional model)
 
-## 🚀 Getting Started
-
-### 1. Prerequisites
-* Python 3.10 or 3.11
-* A working webcam
-
-### 2. Installation
-Clone the repository and install the dependencies:
+### Installation
 
 ```bash
 git clone https://github.com/aziz11414/air-keyboard.git
 cd air-keyboard
+
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+source .venv/bin/activate
+
 pip install -r requirements.txt
 ```
 
-### 3. Run the Application
+### Run
+
 ```bash
 python air_keyboard.py
 ```
 
-Show your hand to the camera to begin air-writing!
+Raise your hand in front of the camera to begin.
+
+### Optional: train the EMNIST model
+
+The EMNIST backend is used as a fallback when EasyOCR is unavailable.
+
+```bash
+python train_model.py               # auto-detect backend
+python train_model.py --tensorflow  # CNN, higher accuracy
+python train_model.py --sklearn     # MLP, lighter, CPU only
+```
+
+Trained models are written to `model/`.
 
 ---
 
-## 📜 License
-This project is open-source and released under the [MIT License](LICENSE).
+## Project Structure
+
+```
+.
+├── air_keyboard.py          Main loop, HUD and video compositing
+├── gesture_engine.py        One Euro Filter, pose estimation, gesture state machine
+├── spline_renderer.py       Catmull-Rom to Bezier conversion, SVG exporter
+├── bimanual_ui.py           Radial menu and spatial word manipulator
+├── symspell_corrector.py    SymSpell dictionary and bigram language model
+├── online_tracker.py        Temporal trajectory processor and calibration engine
+├── text_corrector.py        Sequence-level probability corrector
+├── train_model.py           EMNIST training pipeline (TensorFlow and scikit-learn)
+├── requirements.txt         Python dependencies
+├── hand_landmarker.task     MediaPipe hand tracking model
+├── model/                   Trained models
+├── dataset/                 Calibration logs and trajectory datasets
+├── exports/                 Generated SVG and MP4 files
+└── web-app/                 Companion web / React client
+```
+
+---
+
+## Roadmap
+
+- [ ] **Online trajectory recognition**: a 1D-CNN / CTC model trained directly on stroke features (`x, y, dx, dy, speed, curvature`) collected with the calibration tool (`K`), removing the rasterization step and reading cursive from gesture dynamics.
+- [ ] **ONNX export and web runtime**: port the gesture engine and temporal model to `web-app/` with `onnxruntime-web` for zero-install, in-browser use.
+- [ ] **Depth-plane writing**: start a stroke by pushing the finger through a virtual plane, as an alternative to the dwell timer.
+- [ ] **Multilingual corpus**: extend dictionaries to Spanish, German and Arabic, with vocabulary ingestion at runtime.
+- [ ] **Session replay**: animated playback of strokes from their timestamps.
+- [ ] **Virtual camera output**: use the board as a source in video-conferencing tools.
+
+---
+
+## Contributing
+
+Contributions are welcome. To propose a change:
+
+1. Fork the repository and create a feature branch.
+2. Keep changes focused and describe the motivation in the pull request.
+3. Open an issue first for larger changes, so the approach can be discussed.
+
+Bug reports are most useful with your Python version, operating system, camera resolution and the console output.
+
+---
+
+## License
+
+Released under the [MIT License](LICENSE).

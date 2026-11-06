@@ -13,6 +13,11 @@ from spline_renderer import render_stroke_smooth, export_svg_bezier
 from bimanual_ui import RadialMenu, WordManipulator
 from symspell_corrector import SymSpellCorrector
 from online_tracker import OnlineTrajectory, CalibrationManager
+from shape_engine import ShapeRecognizer
+from session_replay import SessionReplayer
+from smart_assistant import SessionAssistant
+from virtual_camera import VirtualCameraManager
+from multilingual_engine import MultilingualManager
 
 # --- CONFIGURATION -----------------------------------------------------
 CAMERA_INDEX = 0
@@ -885,8 +890,9 @@ def main():
     print("  [K] Calibration Mode      | [Space] Commit Word       | [C] Clear All")
     print("  [R] Re-scan OCR           | [N] Mode (Auto/0-9/A-Z)   | [Z] Undo")
     print("  [Tab] Cycle Alternatives  | [Bksp] Delete Character   | [B] Brush")
-    print("  [W] Board                 | [P] Export SVG (Bézier)   | [V] Record MP4")
-    print("  [1-5] Color               | [Q] Quit")
+    print("  [W] Board                 | [P] Export SVG (Bezier)   | [V] Record MP4")
+    print("  [F] Auto-Shape Snap       | [Y] Session Replay        | [M] Export Notes")
+    print("  [U] Virtual Cam (OBS)     | [L] Lang (FR/EN/AR)       | [1-5] Color | [Q] Quit")
     print("=" * 72)
 
     cap = cv2.VideoCapture(CAMERA_INDEX)
